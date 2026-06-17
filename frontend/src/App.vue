@@ -77,6 +77,83 @@
       </div>
     </div>
 
+    <!-- Homework -->
+    <div v-if="activeTab === 'homework'" class="flex flex-col gap-4">
+      <HomeworkCreator v-if="homeworkStore.phase === 'create'" />
+      <HomeworkPractice v-else-if="homeworkStore.phase === 'practice'" />
+      <HomeworkResult v-else-if="homeworkStore.phase === 'result'" />
+
+      <div v-else class="flex flex-col gap-4">
+        <div class="flex justify-between items-center">
+          <h3 class="text-purple-300 font-bold text-lg">家庭作业</h3>
+          <button @click="homeworkStore.goCreate()"
+            class="bg-purple-500 px-4 py-2 rounded hover:bg-purple-400 text-sm">
+            + 布置新作业
+          </button>
+        </div>
+
+        <div v-if="homeworkStore.tasks.length === 0" class="bg-gray-900 rounded-xl p-8 flex flex-col items-center gap-3">
+          <div class="text-5xl">📝</div>
+          <div class="text-gray-400">还没有作业，点击上方按钮布置新作业</div>
+        </div>
+
+        <div v-else class="space-y-3">
+          <div v-for="task in homeworkStore.tasks" :key="task.id"
+            class="bg-gray-900 rounded-xl p-4 flex items-center gap-4">
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-white font-bold">{{ task.title }}</span>
+                <span class="text-xs px-2 py-0.5 rounded"
+                  :class="task.type === 'charToBraille' ? 'bg-blue-900 text-blue-300' : 'bg-green-900 text-green-300'">
+                  {{ task.type === 'charToBraille' ? '字符→盲文' : '盲文→字符' }}
+                </span>
+                <span v-if="homeworkStore.completedTaskIds.has(task.id)"
+                  class="text-xs px-2 py-0.5 rounded bg-green-900 text-green-300">
+                  已完成
+                </span>
+              </div>
+              <div class="text-gray-500 text-sm mt-1">
+                {{ task.chars.length }} 个字符 · {{ task.questionCount }} 道题 · {{ new Date(task.createdAt).toLocaleDateString('zh-CN') }}
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button @click="homeworkStore.startPractice(task)"
+                class="bg-purple-500 px-3 py-1.5 rounded text-sm hover:bg-purple-400">
+                开始练习
+              </button>
+              <button @click="homeworkStore.deleteTask(task.id)"
+                class="bg-gray-700 px-3 py-1.5 rounded text-sm hover:bg-red-600 text-gray-300">
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="homeworkStore.results.length > 0" class="bg-gray-900 rounded-xl p-4">
+          <h4 class="text-gray-400 text-sm mb-3">历史成绩</h4>
+          <div class="space-y-2 max-h-64 overflow-y-auto">
+            <div v-for="r in homeworkStore.results.slice(0, 10)" :key="r.taskId + r.completedAt"
+              class="flex items-center gap-3 bg-gray-800 rounded p-2 text-sm">
+              <span class="font-bold w-12" :class="r.correctCount / r.totalQuestions >= 0.7 ? 'text-green-400' : 'text-red-400'">
+                {{ Math.round(r.correctCount / r.totalQuestions * 100) }}%
+              </span>
+              <span class="text-gray-300 flex-1">{{ r.title }}</span>
+              <span class="text-gray-500">{{ r.correctCount }}/{{ r.totalQuestions }}</span>
+              <span class="text-gray-600 hidden sm:inline">{{ new Date(r.completedAt).toLocaleDateString('zh-CN') }}</span>
+              <button @click="homeworkStore.viewResultDetail(r)"
+                class="text-xs px-2 py-1 bg-purple-600 rounded hover:bg-purple-500 text-white">
+                详情
+              </button>
+              <button @click="copyHistoryResult(r)"
+                class="text-xs px-2 py-1 bg-blue-600 rounded hover:bg-blue-500 text-white">
+                分享
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Reference -->
     <div v-if="activeTab === 'ref'" class="bg-gray-900 rounded-xl p-4">
       <h3 class="text-purple-300 font-bold mb-3">盲文速查表</h3>
@@ -96,19 +173,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useBrailleStore } from './store/braille'
+import { useHomeworkStore } from './store/homework'
 import { BRAILLE_MAP } from './utils/braille'
 import BrailleCell from './components/BrailleCell.vue'
+import HomeworkCreator from './components/HomeworkCreator.vue'
+import HomeworkPractice from './components/HomeworkPractice.vue'
+import HomeworkResult from './components/HomeworkResult.vue'
 
 const store = useBrailleStore()
+const homeworkStore = useHomeworkStore()
 const brailleMap = BRAILLE_MAP
 const tabs = [
   { id: 'translate', label: '翻译模式' },
   { id: 'learn', label: '训练模式' },
+  { id: 'homework', label: '家庭作业' },
   { id: 'ref', label: '速查表' },
 ]
 const activeTab = ref('translate')
+
+watch(activeTab, (tab) => {
+  if (tab !== 'homework' && homeworkStore.phase !== 'list') {
+    homeworkStore.goBack()
+  }
+})
 
 function doExport() {
   const text = store.exportPDF()
@@ -117,5 +206,15 @@ function doExport() {
   a.href = URL.createObjectURL(blob)
   a.download = 'braille-output.txt'
   a.click()
+}
+
+async function copyHistoryResult(result: any) {
+  const text = homeworkStore.generateShareText(result)
+  try {
+    await navigator.clipboard.writeText(text)
+    alert('作业报告已复制到剪贴板！')
+  } catch {
+    alert('复制失败，请手动复制')
+  }
 }
 </script>
